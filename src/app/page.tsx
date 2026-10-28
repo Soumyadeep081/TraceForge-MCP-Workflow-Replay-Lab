@@ -3,18 +3,24 @@
 import React, { useState, useEffect } from 'react';
 import {
   ComparisonConfig,
+  ReplayBranch,
   ReplayRun,
   TraceStep,
   WorkflowTrace,
 } from '@/types/workflow';
 import {
   clearReplayRuns,
+  deleteBranch,
   deleteReplayRun,
   deleteWorkflow,
+  getBranchById,
   getComparisonConfig,
+  getStoredBranches,
   getStoredReplayRuns,
   getStoredWorkflows,
+  resetToSeedBranches,
   resetToSeedWorkflows,
+  saveBranch,
   saveComparisonConfig,
   saveReplayRun,
   saveWorkflow,
@@ -28,17 +34,21 @@ import { StepDetailDrawer } from '@/components/StepDetailDrawer';
 import { ComparisonConfigModal } from '@/components/ComparisonConfigModal';
 import { NewWorkflowModal } from '@/components/NewWorkflowModal';
 import { ImportExportModal } from '@/components/ImportExportModal';
-import { SEEDED_WORKFLOWS } from '@/lib/seedData';
+import { BranchReplayModal } from '@/components/BranchReplayModal';
+import { BranchReplayView } from '@/components/BranchReplayView';
+import { SEEDED_BRANCHES, SEEDED_WORKFLOWS } from '@/lib/seedData';
 
 export default function TraceForgeApp() {
   const [mounted, setMounted] = useState(false);
   const [workflows, setWorkflows] = useState<WorkflowTrace[]>(SEEDED_WORKFLOWS);
+  const [branches, setBranches] = useState<ReplayBranch[]>(SEEDED_BRANCHES);
   const [replayRuns, setReplayRuns] = useState<ReplayRun[]>([]);
   const [comparisonConfig, setComparisonConfig] = useState<ComparisonConfig>(getComparisonConfig());
 
   // Navigation & Selection State
   const [activeTab, setActiveTab] = useState<NavTab>('library');
   const [activeWorkflowId, setActiveWorkflowId] = useState<string>('wf-support-ticket-triage');
+  const [activeBranchId, setActiveBranchId] = useState<string>('branch-support-ticket-p3');
   const [selectedStep, setSelectedStep] = useState<TraceStep | null>(null);
   const [selectedStepIndex, setSelectedStepIndex] = useState<number>(0);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
@@ -48,6 +58,11 @@ export default function TraceForgeApp() {
   const [isNewWorkflowModalOpen, setIsNewWorkflowModalOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [exportWorkflowTarget, setExportWorkflowTarget] = useState<WorkflowTrace | null>(null);
+
+  // Branch creation modal state
+  const [isBranchModalOpen, setIsBranchModalOpen] = useState(false);
+  const [branchTargetStep, setBranchTargetStep] = useState<TraceStep | null>(null);
+  const [branchTargetStepIndex, setBranchTargetStepIndex] = useState<number>(0);
 
   // Toast feedback
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -60,20 +75,27 @@ export default function TraceForgeApp() {
   // Hydrate from localStorage on client mount
   useEffect(() => {
     const loadedWorkflows = getStoredWorkflows();
+    const loadedBranches = getStoredBranches();
     const loadedRuns = getStoredReplayRuns();
     const loadedConfig = getComparisonConfig();
 
     setWorkflows(loadedWorkflows);
+    setBranches(loadedBranches);
     setReplayRuns(loadedRuns);
     setComparisonConfig(loadedConfig);
 
     if (loadedWorkflows.length > 0) {
       setActiveWorkflowId(loadedWorkflows[0].id);
     }
+    if (loadedBranches.length > 0) {
+      setActiveBranchId(loadedBranches[0].id);
+    }
     setMounted(true);
   }, []);
 
   const activeWorkflow = workflows.find((w) => w.id === activeWorkflowId) || workflows[0] || null;
+  const workflowBranches = branches.filter((b) => b.workflowId === activeWorkflow?.id);
+  const activeBranch = branches.find((b) => b.id === activeBranchId) || workflowBranches[0] || null;
 
   // Handlers
   const handleOpenWorkflow = (id: string) => {
@@ -153,6 +175,7 @@ export default function TraceForgeApp() {
     saveReplayRun(run);
     setReplayRuns(getStoredReplayRuns());
     setWorkflows(getStoredWorkflows());
+    setBranches(getStoredBranches());
     showToast(`Replay completed: ${run.overallStatus.toUpperCase()}`);
   };
 
@@ -170,11 +193,16 @@ export default function TraceForgeApp() {
 
   const handleResetSeeds = () => {
     const defaultSeeds = resetToSeedWorkflows();
+    const defaultBranches = resetToSeedBranches();
     setWorkflows(defaultSeeds);
+    setBranches(defaultBranches);
     if (defaultSeeds.length > 0) {
       setActiveWorkflowId(defaultSeeds[0].id);
     }
-    showToast('Demo workflows restored to default seed state');
+    if (defaultBranches.length > 0) {
+      setActiveBranchId(defaultBranches[0].id);
+    }
+    showToast('Demo workflows and branches restored to default seed state');
   };
 
   const handleNewWorkflow = (newWf: WorkflowTrace) => {
@@ -220,6 +248,7 @@ export default function TraceForgeApp() {
     deleteWorkflow(id);
     const remaining = getStoredWorkflows();
     setWorkflows(remaining);
+    setBranches(getStoredBranches());
     if (activeWorkflowId === id && remaining.length > 0) {
       setActiveWorkflowId(remaining[0].id);
     }
@@ -230,6 +259,44 @@ export default function TraceForgeApp() {
     saveComparisonConfig(newConfig);
     setComparisonConfig(newConfig);
     showToast('Comparison rules updated');
+  };
+
+  // Branch Replay Handlers
+  const handleOpenBranchModal = (step: TraceStep, index: number) => {
+    setBranchTargetStep(step);
+    setBranchTargetStepIndex(index);
+    setIsBranchModalOpen(true);
+  };
+
+  const handleCreateBranch = (newBranch: ReplayBranch) => {
+    saveBranch(newBranch);
+    const updated = getStoredBranches();
+    setBranches(updated);
+    setActiveBranchId(newBranch.id);
+    setActiveTab('branch');
+    showToast(`Branch "${newBranch.name}" created`);
+  };
+
+  const handleSelectBranch = (branchId: string) => {
+    setActiveBranchId(branchId);
+    setActiveTab('branch');
+  };
+
+  const handleUpdateBranch = (updated: ReplayBranch) => {
+    saveBranch(updated);
+    setBranches(getStoredBranches());
+    showToast(`Branch "${updated.name}" updated`);
+  };
+
+  const handleDeleteBranch = (branchId: string) => {
+    deleteBranch(branchId);
+    const remaining = getStoredBranches(activeWorkflow?.id);
+    setBranches(getStoredBranches());
+    if (remaining.length > 0) {
+      setActiveBranchId(remaining[0].id);
+    }
+    setActiveTab('timeline');
+    showToast('Branch deleted');
   };
 
   if (!mounted) {
@@ -256,6 +323,8 @@ export default function TraceForgeApp() {
         onTabChange={setActiveTab}
         activeWorkflowName={activeWorkflow?.name}
         hasActiveWorkflow={!!activeWorkflow}
+        activeBranchName={activeBranch?.name}
+        hasActiveBranch={!!activeBranch}
         onOpenRules={() => setIsConfigModalOpen(true)}
         onNewWorkflow={() => setIsNewWorkflowModalOpen(true)}
         onImportTrace={() => {
@@ -287,12 +356,28 @@ export default function TraceForgeApp() {
         {activeTab === 'timeline' && activeWorkflow && (
           <WorkflowTimeline
             workflow={activeWorkflow}
+            branches={workflowBranches}
             onSelectStep={handleSelectStep}
             selectedStepId={selectedStep?.id}
             onAddStep={handleAddStep}
             onDeleteStep={handleDeleteStep}
             onReorderSteps={handleReorderSteps}
             onStartReplay={() => setActiveTab('replay')}
+            onOpenRules={() => setIsConfigModalOpen(true)}
+            onBranchStep={handleOpenBranchModal}
+            onSelectBranch={handleSelectBranch}
+          />
+        )}
+
+        {activeTab === 'branch' && activeWorkflow && activeBranch && (
+          <BranchReplayView
+            workflow={activeWorkflow}
+            branch={activeBranch}
+            config={comparisonConfig}
+            onUpdateBranch={handleUpdateBranch}
+            onDeleteBranch={handleDeleteBranch}
+            onSaveRun={handleSaveReplayRun}
+            onBackToWorkflow={() => setActiveTab('timeline')}
             onOpenRules={() => setIsConfigModalOpen(true)}
           />
         )}
@@ -327,7 +412,20 @@ export default function TraceForgeApp() {
         onClose={() => setIsDrawerOpen(false)}
         onUpdateStep={handleUpdateStep}
         onDeleteStep={handleDeleteStep}
+        onBranchStep={handleOpenBranchModal}
       />
+
+      {/* Branch Replay Creation Modal */}
+      {isBranchModalOpen && activeWorkflow && (
+        <BranchReplayModal
+          isOpen={isBranchModalOpen}
+          onClose={() => setIsBranchModalOpen(false)}
+          workflow={activeWorkflow}
+          step={branchTargetStep}
+          stepIndex={branchTargetStepIndex}
+          onCreateBranch={handleCreateBranch}
+        />
+      )}
 
       {/* Comparison Rules Configuration Modal */}
       <ComparisonConfigModal

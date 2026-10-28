@@ -1,9 +1,10 @@
-import { ComparisonConfig, ReplayRun, WorkflowTrace } from '@/types/workflow';
-import { DEFAULT_COMPARISON_CONFIG, SEEDED_WORKFLOWS } from './seedData';
+import { ComparisonConfig, ReplayBranch, ReplayRun, WorkflowTrace } from '@/types/workflow';
+import { DEFAULT_COMPARISON_CONFIG, SEEDED_BRANCHES, SEEDED_WORKFLOWS } from './seedData';
 
 const WORKFLOWS_STORAGE_KEY = 'traceforge_workflows_v1';
 const REPLAY_RUNS_STORAGE_KEY = 'traceforge_replay_runs_v1';
 const COMPARISON_CONFIG_KEY = 'traceforge_comparison_config_v1';
+const BRANCHES_STORAGE_KEY = 'traceforge_branches_v1';
 
 export function getStoredWorkflows(): WorkflowTrace[] {
   if (typeof window === 'undefined') return SEEDED_WORKFLOWS;
@@ -55,13 +56,82 @@ export function deleteWorkflow(id: string): void {
   const workflows = getStoredWorkflows();
   const filtered = workflows.filter((w) => w.id !== id);
   saveStoredWorkflows(filtered);
+
+  // Also remove associated branches
+  const branches = getStoredBranches().filter((b) => b.workflowId !== id);
+  saveStoredBranches(branches);
 }
 
 export function resetToSeedWorkflows(): WorkflowTrace[] {
   if (typeof window !== 'undefined') {
     localStorage.setItem(WORKFLOWS_STORAGE_KEY, JSON.stringify(SEEDED_WORKFLOWS));
+    localStorage.setItem(BRANCHES_STORAGE_KEY, JSON.stringify(SEEDED_BRANCHES));
   }
   return SEEDED_WORKFLOWS;
+}
+
+// Branches storage
+export function getStoredBranches(workflowId?: string): ReplayBranch[] {
+  if (typeof window === 'undefined') return SEEDED_BRANCHES;
+  try {
+    const raw = localStorage.getItem(BRANCHES_STORAGE_KEY);
+    if (!raw) {
+      localStorage.setItem(BRANCHES_STORAGE_KEY, JSON.stringify(SEEDED_BRANCHES));
+      return workflowId
+        ? SEEDED_BRANCHES.filter((b) => b.workflowId === workflowId)
+        : SEEDED_BRANCHES;
+    }
+    const parsed: ReplayBranch[] = JSON.parse(raw);
+    const branches = Array.isArray(parsed) && parsed.length > 0 ? parsed : SEEDED_BRANCHES;
+    return workflowId ? branches.filter((b) => b.workflowId === workflowId) : branches;
+  } catch (err) {
+    console.error('Error reading branches from localStorage:', err);
+    return workflowId
+      ? SEEDED_BRANCHES.filter((b) => b.workflowId === workflowId)
+      : SEEDED_BRANCHES;
+  }
+}
+
+export function saveStoredBranches(branches: ReplayBranch[]): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(BRANCHES_STORAGE_KEY, JSON.stringify(branches));
+  } catch (err) {
+    console.error('Error saving branches to localStorage:', err);
+  }
+}
+
+export function getBranchById(id: string): ReplayBranch | undefined {
+  const branches = getStoredBranches();
+  return branches.find((b) => b.id === id);
+}
+
+export function saveBranch(branch: ReplayBranch): void {
+  const branches = getStoredBranches();
+  const index = branches.findIndex((b) => b.id === branch.id);
+  const updated: ReplayBranch = {
+    ...branch,
+    updatedAt: new Date().toISOString(),
+  };
+
+  if (index >= 0) {
+    branches[index] = updated;
+  } else {
+    branches.unshift(updated);
+  }
+  saveStoredBranches(branches);
+}
+
+export function deleteBranch(id: string): void {
+  const branches = getStoredBranches().filter((b) => b.id !== id);
+  saveStoredBranches(branches);
+}
+
+export function resetToSeedBranches(): ReplayBranch[] {
+  if (typeof window !== 'undefined') {
+    localStorage.setItem(BRANCHES_STORAGE_KEY, JSON.stringify(SEEDED_BRANCHES));
+  }
+  return SEEDED_BRANCHES;
 }
 
 // Replay history

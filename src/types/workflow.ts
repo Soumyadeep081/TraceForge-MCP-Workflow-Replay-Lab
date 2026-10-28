@@ -69,6 +69,8 @@ export interface ReplayRun {
   id: string;
   workflowId: string;
   workflowName: string;
+  branchId?: string;
+  branchName?: string;
   startedAt: string;
   completedAt: string;
   mode: ReplayMode;
@@ -83,3 +85,28 @@ export interface ReplayRun {
   durationMs: number;
   stepResults: Record<string, StepReplayResult>;
 }
+
+export interface BranchStepModification {
+  stepId: string;
+  stepIndex: number;
+  newArguments?: any;
+  newResult?: any;
+  newContent?: string;
+}
+
+export interface ReplayBranch {
+  id: string;
+  name: string;
+  workflowId: string;
+  workflowName: string;
+  divergedAtStepId: string;
+  divergedAtStepIndex: number;
+  description?: string;
+  createdAt: string;
+  updatedAt: string;
+  modification: BranchStepModification;
+  branchSteps: TraceStep[];
+  latestRun?: ReplayRun;
+  lastReplayStatus?: 'passed' | 'changed' | 'failed' | 'not_run';
+}
+

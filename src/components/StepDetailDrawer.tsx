@@ -17,6 +17,7 @@ import {
   Trash2,
   Save,
   CheckCircle2,
+  GitFork,
 } from 'lucide-react';
 
 interface StepDetailDrawerProps {
@@ -27,6 +28,7 @@ interface StepDetailDrawerProps {
   onClose: () => void;
   onUpdateStep: (updated: TraceStep) => void;
   onDeleteStep: (stepId: string) => void;
+  onBranchStep?: (step: TraceStep, index: number) => void;
 }
 
 export function StepDetailDrawer({
@@ -37,6 +39,7 @@ export function StepDetailDrawer({
   onClose,
   onUpdateStep,
   onDeleteStep,
+  onBranchStep,
 }: StepDetailDrawerProps) {
   const [activeTab, setActiveTab] = useState<'view' | 'edit'>('view');
   const [copied, setCopied] = useState(false);
@@ -385,18 +388,34 @@ export function StepDetailDrawer({
 
       {/* Footer */}
       <div className="flex items-center justify-between px-5 py-3 border-t border-slate-800 bg-slate-900/90">
-        <button
-          onClick={() => {
-            if (confirm('Delete this step from workflow?')) {
-              onDeleteStep(step.id);
-              onClose();
-            }
-          }}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-rose-400 hover:text-rose-300 hover:bg-rose-950/40 rounded transition-colors"
-        >
-          <Trash2 className="w-3.5 h-3.5" />
-          <span>Delete Step</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => {
+              if (confirm('Delete this step from workflow?')) {
+                onDeleteStep(step.id);
+                onClose();
+              }
+            }}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-rose-400 hover:text-rose-300 hover:bg-rose-950/40 rounded transition-colors"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+            <span>Delete Step</span>
+          </button>
+
+          {onBranchStep && (
+            <button
+              onClick={() => {
+                onClose();
+                onBranchStep(step, stepIndex);
+              }}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-indigo-300 hover:text-indigo-200 bg-indigo-950/50 hover:bg-indigo-900/70 border border-indigo-700/60 rounded transition-colors font-medium"
+              title="Branch replay from this step"
+            >
+              <GitFork className="w-3.5 h-3.5 text-indigo-400" />
+              <span>Branch from Here</span>
+            </button>
+          )}
+        </div>
 
         {activeTab === 'edit' && (
           <button

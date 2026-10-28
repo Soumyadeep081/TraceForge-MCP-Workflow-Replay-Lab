@@ -24,6 +24,19 @@
   - Controls to reorder steps (move up/down) or delete steps.
   - Add new steps anywhere in the workflow.
 
+### 3. Branch Replay (Fork & Replay from Any Step)
+- **Branch from any Step**: Select any step in a recorded workflow to create an experimental replay branch diverging at that exact point.
+- **Validated Mock Response & Argument Editor**: Edit tool arguments or replace the recorded tool result with custom mock responses with real-time JSON validation.
+- **Side-by-Side Divergence View**:
+  - Clear visual demarcation of the divergence point with a glowing ribbon.
+  - Steps before divergence are inherited from baseline.
+  - Downstream steps cascade with the modified mock data.
+- **Cascading Impact Demonstration**:
+  - Seeded Demo Branch: **"P3-Low Priority Ticket & Standard Queue"** modifies mock ticket priority in Step 3 from `P1-Critical` to `P3-Low`.
+  - Shows how downstream KB query dynamically shifts from outage recovery to standard invoice receipts, and the assistant recommendation adjusts accordingly.
+- **Persistent Branch Management**: Branches persist across page refreshes in `localStorage`, can be renamed, rerun, and deleted.
+- **Simulation Transparency**: Clearly labeled as local deterministic mock replay; never implies unsolicited external MCP calls.
+
 ### 3. Replay Lab
 - **Mock Replay (Local & Deterministic)**:
   - Immediate execution without external network requirements or paid API keys.

@@ -11,15 +11,18 @@ import {
   Workflow,
   Radio,
   Flame,
+  GitFork,
 } from 'lucide-react';
 
-export type NavTab = 'library' | 'timeline' | 'replay' | 'history';
+export type NavTab = 'library' | 'timeline' | 'replay' | 'history' | 'branch';
 
 interface NavbarProps {
   activeTab: NavTab;
   onTabChange: (tab: NavTab) => void;
   activeWorkflowName?: string;
   hasActiveWorkflow: boolean;
+  activeBranchName?: string;
+  hasActiveBranch: boolean;
   onOpenRules: () => void;
   onNewWorkflow: () => void;
   onImportTrace: () => void;
@@ -32,6 +35,8 @@ export function Navbar({
   onTabChange,
   activeWorkflowName,
   hasActiveWorkflow,
+  activeBranchName,
+  hasActiveBranch,
   onOpenRules,
   onNewWorkflow,
   onImportTrace,
@@ -110,6 +115,20 @@ export function Navbar({
                     <Play className="w-3.5 h-3.5 text-indigo-400 fill-indigo-400" />
                     <span>Replay Lab</span>
                   </button>
+
+                  {hasActiveBranch && (
+                    <button
+                      onClick={() => onTabChange('branch')}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                        activeTab === 'branch'
+                          ? 'bg-purple-600/20 text-purple-300 border border-purple-500/30 font-semibold'
+                          : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+                      }`}
+                    >
+                      <GitFork className="w-3.5 h-3.5 text-purple-400" />
+                      <span className="max-w-[140px] truncate">{activeBranchName || 'Branch'}</span>
+                    </button>
+                  )}
                 </>
               )}
 
@@ -188,6 +207,14 @@ export function Navbar({
                 Replay Lab
               </button>
             </>
+          )}
+          {hasActiveBranch && (
+            <button
+              onClick={() => onTabChange('branch')}
+              className={`px-2 py-1 rounded ${activeTab === 'branch' ? 'text-purple-400 font-bold' : 'text-slate-400'}`}
+            >
+              Branch
+            </button>
           )}
           <button
             onClick={() => onTabChange('history')}

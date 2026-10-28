@@ -244,3 +244,189 @@ export async function executeReplayWorkflow(
 
   return run;
 }
+
+/**
+ * Builds the sequence of branch steps given a baseline workflow and a divergence modification
+ */
+export function buildBranchStepsFromModification(
+  baselineWorkflow: WorkflowTrace,
+  modification: import('@/types/workflow').BranchStepModification
+): TraceStep[] {
+  const steps: TraceStep[] = [];
+  const { stepIndex, newArguments, newResult, newContent } = modification;
+
+  for (let i = 0; i < baselineWorkflow.steps.length; i++) {
+    const base = baselineWorkflow.steps[i];
+
+    if (i < stepIndex) {
+      // Step before divergence point: identical
+      steps.push(JSON.parse(JSON.stringify(base)));
+    } else if (i === stepIndex) {
+      // Divergence step: apply user modifications
+      const divergedStep: TraceStep = JSON.parse(JSON.stringify(base));
+      if (newArguments !== undefined) divergedStep.arguments = newArguments;
+      if (newResult !== undefined) divergedStep.result = newResult;
+      if (newContent !== undefined) divergedStep.content = newContent;
+      steps.push(divergedStep);
+    } else {
+      // Subsequent downstream step: cascade from modification
+      const downstreamStep: TraceStep = JSON.parse(JSON.stringify(base));
+
+      // Intelligent cascade for Support ticket triage when priority or status is modified
+      const modifiedResult = newResult;
+      const isDowngradedPriority =
+        modifiedResult &&
+        typeof modifiedResult === 'object' &&
+        (modifiedResult.priority === 'P3-Low' ||
+          modifiedResult.priority === 'P4-Normal' ||
+          modifiedResult.status === 'reopened_inquiry' ||
+          modifiedResult.status === 'resolved');
+
+      if (isDowngradedPriority && baselineWorkflow.id === 'wf-support-ticket-triage') {
+        if (downstreamStep.tool === 'search_articles' && downstreamStep.type === 'tool_call') {
+          downstreamStep.arguments = {
+            query: 'Invoice receipt styling and currency formatting inquiry',
+            category: 'billing-templates',
+            limit: 3,
+            min_relevance: 0.85,
+          };
+        } else if (downstreamStep.tool === 'search_articles' && downstreamStep.type === 'tool_result') {
+          downstreamStep.result = {
+            query: 'Invoice receipt styling and currency formatting inquiry',
+            total_matches: 1,
+            matched_articles: [
+              {
+                article_id: 'KB-112',
+                title: 'Customizing Invoice Receipts and VAT Tax ID Layouts',
+                category: 'Billing Templates',
+                relevance_score: 0.94,
+                verified_by: 'Billing Documentation Lead',
+                summary: 'Instructions for configuring receipt logo branding and localized VAT IDs in account billing settings.',
+                resolution_steps: [
+                  'Go to Admin Console > Billing & Invoicing > Branding',
+                  'Upload organization high-resolution PNG receipt logo',
+                  'Toggle "Display Tax ID / VAT Number" on monthly invoice template',
+                ],
+                estimated_recovery_seconds: 60,
+              },
+            ],
+          };
+        } else if (downstreamStep.type === 'assistant') {
+          downstreamStep.content = `### Support Ticket Triage: TCK-8921 (Acme Corp)\n\n- **Customer**: Acme Corp (ARR $12,000)\n- **Severity**: ${
+            modifiedResult.priority || 'P3-Low'
+          } (Standard queue, 24-hour SLA window)\n- **Inquiry**: Customizing PDF receipt formatting and VAT ID placement. No checkout or billing outages.\n\n#### Recommended Action Plan (Per Verified Article KB-112):\n1. **Configure Receipt Branding**: Direct customer to **Billing & Invoicing > Branding** to update the receipt logo.\n2. **Enable VAT Display**: Ensure the "Display Tax ID / VAT Number" toggle is active on invoice preferences.\n3. **Close Ticket with Guide**: Respond with the standard self-serve documentation link. No emergency engineering escalation needed.`;
+        }
+      }
+
+      steps.push(downstreamStep);
+    }
+  }
+
+  return steps;
+}
+
+/**
+ * Executes replay over a branched workflow against the original baseline
+ */
+export async function executeBranchReplay(
+  baselineWorkflow: WorkflowTrace,
+  branch: import('@/types/workflow').ReplayBranch,
+  options: {
+    config: ComparisonConfig;
+    playbackSpeed: 'normal' | 'fast' | 'instant';
+    onProgress?: (
+      stepIndex: number,
+      totalSteps: number,
+      currentExecution: StepReplayExecution
+    ) => void;
+    abortSignal?: { aborted: boolean };
+  }
+): Promise<ReplayRun> {
+  const startedAt = new Date().toISOString();
+  const startTime = Date.now();
+  const stepResults: Record<string, StepReplayResult> = {};
+
+  let passedSteps = 0;
+  let changedSteps = 0;
+  let failedSteps = 0;
+
+  const delayMultiplier =
+    options.playbackSpeed === 'instant' ? 0 : options.playbackSpeed === 'fast' ? 0.3 : 1;
+
+  for (let i = 0; i < branch.branchSteps.length; i++) {
+    if (options.abortSignal?.aborted) {
+      break;
+    }
+
+    const branchStep = branch.branchSteps[i];
+    const baselineStep = baselineWorkflow.steps[i];
+
+    if (delayMultiplier > 0) {
+      const stepWait = Math.min(600, Math.max(150, (branchStep.durationMs || 180) * delayMultiplier));
+      await new Promise((resolve) => setTimeout(resolve, stepWait));
+    }
+
+    const replayedPayload =
+      branchStep.type === 'tool_result'
+        ? branchStep.result
+        : branchStep.type === 'tool_call'
+        ? branchStep.arguments
+        : branchStep.content;
+
+    const stepComparison = compareStep(
+      baselineStep || branchStep,
+      replayedPayload,
+      branchStep.durationMs || 150,
+      undefined,
+      options.config
+    );
+
+    stepResults[branchStep.id] = stepComparison;
+
+    if (stepComparison.status === 'passed') passedSteps++;
+    else if (stepComparison.status === 'changed') changedSteps++;
+    else if (stepComparison.status === 'failed') failedSteps++;
+
+    if (options.onProgress) {
+      options.onProgress(i, branch.branchSteps.length, {
+        step: branchStep,
+        result: stepComparison,
+        replayedPayload,
+        durationMs: branchStep.durationMs || 150,
+      });
+    }
+  }
+
+  const completedAt = new Date().toISOString();
+  const totalDuration = Date.now() - startTime;
+
+  let overallStatus: 'passed' | 'changed' | 'failed' = 'passed';
+  if (failedSteps > 0) {
+    overallStatus = 'failed';
+  } else if (changedSteps > 0) {
+    overallStatus = 'changed';
+  }
+
+  const run: ReplayRun = {
+    id: `run-branch-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+    workflowId: baselineWorkflow.id,
+    workflowName: baselineWorkflow.name,
+    branchId: branch.id,
+    branchName: branch.name,
+    startedAt,
+    completedAt,
+    mode: 'mock',
+    simulationScenario: 'simulate_changed',
+    comparisonConfig: options.config,
+    overallStatus,
+    totalSteps: branch.branchSteps.length,
+    passedSteps,
+    changedSteps,
+    failedSteps,
+    durationMs: totalDuration,
+    stepResults,
+  };
+
+  return run;
+}
+

@@ -21,10 +21,12 @@ import {
   Check,
   ChevronRight,
   Sliders,
+  GitFork,
 } from 'lucide-react';
 
 interface WorkflowTimelineProps {
   workflow: WorkflowTrace;
+  branches?: import('@/types/workflow').ReplayBranch[];
   onSelectStep: (step: TraceStep, index: number) => void;
   selectedStepId?: string;
   onAddStep: (step: TraceStep) => void;
@@ -32,10 +34,13 @@ interface WorkflowTimelineProps {
   onReorderSteps: (startIndex: number, endIndex: number) => void;
   onStartReplay: () => void;
   onOpenRules: () => void;
+  onBranchStep: (step: TraceStep, index: number) => void;
+  onSelectBranch?: (branchId: string) => void;
 }
 
 export function WorkflowTimeline({
   workflow,
+  branches = [],
   onSelectStep,
   selectedStepId,
   onAddStep,
@@ -43,6 +48,8 @@ export function WorkflowTimeline({
   onReorderSteps,
   onStartReplay,
   onOpenRules,
+  onBranchStep,
+  onSelectBranch,
 }: WorkflowTimelineProps) {
   const [showAddModal, setShowAddModal] = useState(false);
   const [copiedTrace, setCopiedTrace] = useState(false);
@@ -188,6 +195,32 @@ export function WorkflowTimeline({
                 ))}
               </div>
             )}
+
+            {/* Branches Quick Switcher Strip */}
+            {branches.length > 0 && (
+              <div className="flex flex-wrap items-center gap-2 mt-3 pt-3 border-t border-slate-800/80">
+                <span className="text-[11px] font-mono text-slate-400 flex items-center gap-1">
+                  <GitFork className="w-3.5 h-3.5 text-indigo-400" />
+                  <span>Replay Branches ({branches.length}):</span>
+                </span>
+                <div className="flex flex-wrap gap-1.5">
+                  {branches.map((b) => (
+                    <button
+                      key={b.id}
+                      onClick={() => onSelectBranch && onSelectBranch(b.id)}
+                      className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-indigo-950/50 hover:bg-indigo-900/70 text-indigo-200 border border-indigo-700/60 text-xs font-medium transition-colors"
+                      title={b.description || b.name}
+                    >
+                      <GitFork className="w-3 h-3 text-indigo-400" />
+                      <span className="max-w-[200px] truncate">{b.name}</span>
+                      <span className="text-[10px] text-indigo-400 font-mono">
+                        (Diverges @ Step {b.divergedAtStepIndex + 1})
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
@@ -296,11 +329,22 @@ export function WorkflowTimeline({
                   )}
                 </div>
 
-                {/* Step controls: reorder, edit, delete */}
+                {/* Step controls: branch, reorder, edit, delete */}
                 <div
                   onClick={(e) => e.stopPropagation()}
-                  className="flex items-center gap-1 opacity-80 group-hover:opacity-100 transition-opacity"
+                  className="flex items-center gap-1.5 opacity-90 group-hover:opacity-100 transition-opacity"
                 >
+                  <button
+                    onClick={() => onBranchStep(step, idx)}
+                    className="flex items-center gap-1 px-2.5 py-1 rounded-md bg-indigo-950/60 hover:bg-indigo-900/80 text-indigo-300 border border-indigo-700/60 text-xs font-semibold shadow-xs transition-colors hover:scale-[1.02]"
+                    title="Create a replay branch starting from this step"
+                  >
+                    <GitFork className="w-3.5 h-3.5 text-indigo-400" />
+                    <span>Branch Replay</span>
+                  </button>
+
+                  <div className="h-4 w-px bg-slate-800 mx-0.5" />
+
                   <button
                     disabled={idx === 0}
                     onClick={() => onReorderSteps(idx, idx - 1)}
@@ -333,7 +377,7 @@ export function WorkflowTimeline({
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
-                  <ChevronRight className="w-4 h-4 text-slate-500 ml-1" />
+                  <ChevronRight className="w-4 h-4 text-slate-500 ml-0.5" />
                 </div>
               </div>
 

@@ -254,3 +254,141 @@ export const SEEDED_WORKFLOWS: WorkflowTrace[] = [
     ],
   },
 ];
+
+export const SEEDED_BRANCHES: import('@/types/workflow').ReplayBranch[] = [
+  {
+    id: 'branch-support-ticket-p3',
+    name: 'P3-Low Priority Ticket & Standard Queue',
+    workflowId: 'wf-support-ticket-triage',
+    workflowName: 'Support ticket triage',
+    divergedAtStepId: 'step-3-result-fetch-ticket',
+    divergedAtStepIndex: 2,
+    description: 'Branches from step 3 (fetch_ticket result), modifying ticket priority from P1-Critical to P3-Low. Shows how downstream KB query and assistant response adjust to standard resolution.',
+    createdAt: '2026-10-28T10:00:00.000Z',
+    updatedAt: '2026-10-28T10:05:00.000Z',
+    lastReplayStatus: 'changed',
+    modification: {
+      stepId: 'step-3-result-fetch-ticket',
+      stepIndex: 2,
+      newResult: {
+        id: 'TCK-8921',
+        status: 'reopened_inquiry',
+        priority: 'P3-Low',
+        customer: {
+          name: 'Acme Corp (Standard Invoicing)',
+          contact: 'alice@acme.corp',
+          arr: '$12,000',
+          region: 'us-east-1',
+        },
+        created_at: '2026-10-28T09:10:00Z',
+        subject: 'Invoice receipt styling and currency formatting inquiry',
+        details: 'Customer inquired about custom PDF logo layout and VAT formatting on monthly receipt exports. No checkout or API outages.',
+        assigned_team: 'Tier-1 Customer Billing',
+        sla_breach_in_minutes: 1440,
+      },
+    },
+    branchSteps: [
+      {
+        id: 'step-1-user-query',
+        type: 'user',
+        timestamp: '2026-10-28T09:12:01.000Z',
+        content: 'Summarize the newly escalated support ticket #TCK-8921 and recommend immediate next steps to resolve the customer blockage.',
+      },
+      {
+        id: 'step-2-call-fetch-ticket',
+        type: 'tool_call',
+        timestamp: '2026-10-28T09:12:02.100Z',
+        server: 'zendesk-mcp',
+        tool: 'fetch_ticket',
+        durationMs: 140,
+        arguments: {
+          ticket_id: 'TCK-8921',
+          include_audit_trail: true,
+          include_sla_status: true,
+        },
+      },
+      {
+        id: 'step-3-result-fetch-ticket',
+        type: 'tool_result',
+        timestamp: '2026-10-28T09:12:02.240Z',
+        server: 'zendesk-mcp',
+        tool: 'fetch_ticket',
+        durationMs: 135,
+        result: {
+          id: 'TCK-8921',
+          status: 'reopened_inquiry',
+          priority: 'P3-Low',
+          customer: {
+            name: 'Acme Corp (Standard Invoicing)',
+            contact: 'alice@acme.corp',
+            arr: '$12,000',
+            region: 'us-east-1',
+          },
+          created_at: '2026-10-28T09:10:00Z',
+          subject: 'Invoice receipt styling and currency formatting inquiry',
+          details: 'Customer inquired about custom PDF logo layout and VAT formatting on monthly receipt exports. No checkout or API outages.',
+          assigned_team: 'Tier-1 Customer Billing',
+          sla_breach_in_minutes: 1440,
+        },
+      },
+      {
+        id: 'step-4-call-search-kb',
+        type: 'tool_call',
+        timestamp: '2026-10-28T09:12:03.000Z',
+        server: 'kb-mcp',
+        tool: 'search_articles',
+        durationMs: 195,
+        arguments: {
+          query: 'Invoice receipt styling and currency formatting inquiry',
+          category: 'billing-templates',
+          limit: 3,
+          min_relevance: 0.85,
+        },
+      },
+      {
+        id: 'step-5-result-search-kb',
+        type: 'tool_result',
+        timestamp: '2026-10-28T09:12:03.210Z',
+        server: 'kb-mcp',
+        tool: 'search_articles',
+        durationMs: 195,
+        result: {
+          query: 'Invoice receipt styling and currency formatting inquiry',
+          total_matches: 1,
+          matched_articles: [
+            {
+              article_id: 'KB-112',
+              title: 'Customizing Invoice Receipts and VAT Tax ID Layouts',
+              category: 'Billing Templates',
+              relevance_score: 0.94,
+              verified_by: 'Billing Documentation Lead',
+              summary: 'Instructions for configuring receipt logo branding and localized VAT IDs in account billing settings.',
+              resolution_steps: [
+                'Go to Admin Console > Billing & Invoicing > Branding',
+                'Upload organization high-resolution PNG receipt logo',
+                'Toggle "Display Tax ID / VAT Number" on monthly invoice template',
+              ],
+              estimated_recovery_seconds: 60,
+            },
+          ],
+        },
+      },
+      {
+        id: 'step-6-assistant-summary',
+        type: 'assistant',
+        timestamp: '2026-10-28T09:12:04.500Z',
+        content: `### Support Ticket Triage: TCK-8921 (Acme Corp)
+
+- **Customer**: Acme Corp (Standard Invoicing, ARR $12,000)
+- **Severity**: P3-Low (Standard queue, 24-hour SLA window)
+- **Inquiry**: Customizing PDF receipt formatting and VAT ID placement. No checkout or billing outages.
+
+#### Recommended Action Plan (Per Verified Article KB-112):
+1. **Configure Receipt Branding**: Direct Alice to **Billing & Invoicing > Branding** to update the receipt logo.
+2. **Enable VAT Display**: Ensure the "Display Tax ID / VAT Number" toggle is active on invoice preferences.
+3. **Close Ticket with Guide**: Respond with the standard self-serve documentation link. No emergency engineering escalation needed.`,
+      },
+    ],
+  },
+];
+
