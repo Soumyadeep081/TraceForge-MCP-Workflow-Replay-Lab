@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { StepType, TraceStep, WorkflowTrace } from '@/types/workflow';
 import { JsonViewer } from './JsonViewer';
+import { WorkflowAssertionsSection } from './WorkflowAssertionsSection';
 import {
   User,
   Bot,
@@ -22,6 +23,8 @@ import {
   ChevronRight,
   Sliders,
   GitFork,
+  ShieldCheck,
+  ListOrdered,
 } from 'lucide-react';
 
 interface WorkflowTimelineProps {
@@ -36,6 +39,7 @@ interface WorkflowTimelineProps {
   onOpenRules: () => void;
   onBranchStep: (step: TraceStep, index: number) => void;
   onSelectBranch?: (branchId: string) => void;
+  onUpdateWorkflow?: (updated: WorkflowTrace) => void;
 }
 
 export function WorkflowTimeline({
@@ -50,9 +54,14 @@ export function WorkflowTimeline({
   onOpenRules,
   onBranchStep,
   onSelectBranch,
+  onUpdateWorkflow,
 }: WorkflowTimelineProps) {
+  const [workflowSection, setWorkflowSection] = useState<'timeline' | 'assertions'>('timeline');
   const [showAddModal, setShowAddModal] = useState(false);
   const [copiedTrace, setCopiedTrace] = useState(false);
+
+  const assertionsCount = workflow.assertions?.length || 0;
+  const activeAssertionsCount = workflow.assertions?.filter((a) => a.enabled).length || 0;
 
   // New step form state
   const [newType, setNewType] = useState<StepType>('tool_call');
@@ -268,11 +277,75 @@ export function WorkflowTimeline({
             </button>
           </div>
         </div>
+
+        {/* Workflow Sub-Navigation: Timeline vs Assertions */}
+        <div className="flex items-center justify-between border-t border-slate-800/80 mt-4 pt-3">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setWorkflowSection('timeline')}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                workflowSection === 'timeline'
+                  ? 'bg-slate-800 text-slate-100 shadow-xs border border-slate-700'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+              }`}
+            >
+              <ListOrdered className="w-3.5 h-3.5 text-indigo-400" />
+              <span>Timeline Steps</span>
+              <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-slate-950 text-slate-400">
+                {workflow.steps.length}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setWorkflowSection('assertions')}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                workflowSection === 'assertions'
+                  ? 'bg-indigo-600/20 text-indigo-300 border border-indigo-500/40 shadow-xs'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+              }`}
+            >
+              <ShieldCheck className="w-3.5 h-3.5 text-indigo-400" />
+              <span>Workflow Assertions</span>
+              <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-slate-950 text-indigo-300 border border-indigo-500/20">
+                {activeAssertionsCount}/{assertionsCount}
+              </span>
+            </button>
+          </div>
+
+          {workflowSection === 'timeline' && (
+            <button
+              type="button"
+              onClick={() => setWorkflowSection('assertions')}
+              className="text-[11px] text-slate-400 hover:text-indigo-300 flex items-center gap-1 font-mono transition-colors"
+            >
+              <span>{activeAssertionsCount} active assertion{activeAssertionsCount !== 1 ? 's' : ''} configured</span>
+              <ChevronRight className="w-3 h-3 text-slate-500" />
+            </button>
+          )}
+        </div>
       </div>
 
-      {/* Ordered Timeline */}
-      <div className="relative pl-6 space-y-4 before:absolute before:left-3 before:top-3 before:bottom-3 before:w-0.5 before:bg-slate-800">
-        {workflow.steps.map((step, idx) => {
+      {/* Main Content Area: Assertions Section OR Ordered Timeline */}
+      {workflowSection === 'assertions' ? (
+        <WorkflowAssertionsSection
+          workflow={workflow}
+          onUpdateWorkflow={(updated) => {
+            if (onUpdateWorkflow) onUpdateWorkflow(updated);
+          }}
+          onSelectStep={(stepId) => {
+            const idx = workflow.steps.findIndex((s) => s.id === stepId);
+            if (idx >= 0) {
+              onSelectStep(workflow.steps[idx], idx);
+              setWorkflowSection('timeline');
+            }
+          }}
+        />
+      ) : (
+        /* Ordered Timeline */
+        <div className="relative pl-6 space-y-4 before:absolute before:left-3 before:top-3 before:bottom-3 before:w-0.5 before:bg-slate-800">
+          {workflow.steps.map((step, idx) => {
           const colors = getTypeColor(step.type);
           const isSelected = selectedStepId === step.id;
 
@@ -412,6 +485,7 @@ export function WorkflowTimeline({
           );
         })}
       </div>
+      )}
 
       {/* Add Step Modal */}
       {showAddModal && (

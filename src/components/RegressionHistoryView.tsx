@@ -12,11 +12,9 @@ import {
   Clock,
   Trash2,
   ChevronRight,
-  Layers,
-  ArrowLeft,
-  Calendar,
-  Radio,
-  Sliders,
+  ShieldCheck,
+  ExternalLink,
+  ListOrdered,
 } from 'lucide-react';
 
 interface RegressionHistoryViewProps {
@@ -39,6 +37,7 @@ export function RegressionHistoryView({
   );
   const [selectedStepId, setSelectedStepId] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<'all' | 'passed' | 'changed' | 'failed'>('all');
+  const [activeTab, setActiveTab] = useState<'steps' | 'assertions'>('assertions');
 
   // Selected Run
   const activeRun = runs.find((r) => r.id === selectedRunId) || (runs.length > 0 ? runs[0] : null);
@@ -56,6 +55,21 @@ export function RegressionHistoryView({
     totalRuns > 0
       ? Math.round(runs.reduce((acc, r) => acc + (r.durationMs || 0), 0) / totalRuns)
       : 0;
+
+  // Total assertions passed across all historical runs
+  const runsWithAssertions = runs.filter((r) => r.assertionSummary && r.assertionSummary.total > 0);
+  const totalAssertionsEvaluated = runsWithAssertions.reduce(
+    (acc, r) => acc + (r.assertionSummary?.total || 0),
+    0
+  );
+  const totalAssertionsPassed = runsWithAssertions.reduce(
+    (acc, r) => acc + (r.assertionSummary?.passed || 0),
+    0
+  );
+  const assertionPassRate =
+    totalAssertionsEvaluated > 0
+      ? Math.round((totalAssertionsPassed / totalAssertionsEvaluated) * 100)
+      : 100;
 
   // Filtered steps in selected run
   const activeStepResultsList = activeRun
@@ -88,7 +102,7 @@ export function RegressionHistoryView({
             <span>Replay History & Regression Analytics</span>
           </h1>
           <p className="text-xs text-slate-400 mt-1 max-w-2xl leading-relaxed">
-            Audit historical replay runs, observe pass rate trends over time, and inspect regressions where live tool responses deviated from recorded baselines.
+            Audit historical replay runs, observe pass rate trends over time, and inspect regressions where live tool responses or assertions deviated from baselines.
           </p>
         </div>
 
@@ -114,89 +128,47 @@ export function RegressionHistoryView({
         </div>
 
         <div className="p-4 rounded-xl bg-slate-900 border border-slate-800">
-          <div className="text-[11px] font-mono text-slate-500 uppercase">Pass Rate</div>
+          <div className="text-[11px] font-mono text-slate-500 uppercase">Overall Pass Rate</div>
           <div className="text-2xl font-bold text-emerald-400 mt-1 font-mono flex items-center gap-1.5">
             <span>{passRate}%</span>
             <TrendingUp className="w-4 h-4 text-emerald-400" />
           </div>
-          <div className="text-[11px] text-slate-400 mt-1 font-mono">{passedRuns} of {totalRuns} passed</div>
+          <div className="text-[11px] text-slate-400 mt-1 font-mono">{passedRuns} of {totalRuns} runs passed</div>
         </div>
 
         <div className="p-4 rounded-xl bg-slate-900 border border-slate-800">
-          <div className="text-[11px] font-mono text-slate-500 uppercase">Regressions Detected</div>
-          <div className="text-2xl font-bold text-amber-400 mt-1 font-mono">
-            {changedRuns + failedRuns}
+          <div className="text-[11px] font-mono text-slate-500 uppercase">Assertion Compliance</div>
+          <div className="text-2xl font-bold text-indigo-400 mt-1 font-mono flex items-center gap-1.5">
+            <span>{assertionPassRate}%</span>
+            <ShieldCheck className="w-4 h-4 text-indigo-400" />
           </div>
           <div className="text-[11px] text-slate-400 mt-1 font-mono">
-            {changedRuns} changed, {failedRuns} failed
+            {totalAssertionsPassed} of {totalAssertionsEvaluated || 0} assertions met
           </div>
         </div>
 
         <div className="p-4 rounded-xl bg-slate-900 border border-slate-800">
-          <div className="text-[11px] font-mono text-slate-500 uppercase">Avg Replay Latency</div>
-          <div className="text-2xl font-bold text-slate-200 mt-1 font-mono flex items-center gap-1">
-            <span>{avgDuration}</span>
-            <span className="text-xs text-slate-500">ms</span>
+          <div className="text-[11px] font-mono text-slate-500 uppercase">Avg Run Duration</div>
+          <div className="text-2xl font-bold text-slate-100 mt-1 font-mono flex items-center gap-1">
+            <Clock className="w-4 h-4 text-slate-500" />
+            <span>{avgDuration}ms</span>
           </div>
-          <div className="text-[11px] text-slate-400 mt-1">End-to-end trace execution</div>
+          <div className="text-[11px] text-slate-400 mt-1 font-mono">{changedRuns + failedRuns} deviations detected</div>
         </div>
       </div>
 
-      {/* Runs Sparkline / Distribution Bar */}
-      {runs.length > 0 && (
-        <div className="p-4 rounded-xl bg-slate-900 border border-slate-800 space-y-2">
-          <div className="flex items-center justify-between text-xs font-semibold text-slate-300">
-            <span>Recent Runs Distribution Trend</span>
-            <span className="text-slate-500 font-mono text-[11px]">
-              Last {Math.min(runs.length, 30)} runs
-            </span>
-          </div>
-
-          <div className="flex items-center h-4 w-full rounded-md overflow-hidden bg-slate-950 p-0.5 gap-0.5">
-            {runs.slice(0, 30).map((r, i) => (
-              <div
-                key={r.id || i}
-                onClick={() => setSelectedRunId(r.id)}
-                title={`${r.workflowName} (${r.overallStatus.toUpperCase()}) - ${new Date(
-                  r.completedAt
-                ).toLocaleTimeString()}`}
-                className={`h-full flex-1 rounded-xs cursor-pointer transition-all hover:scale-y-125 ${
-                  r.overallStatus === 'passed'
-                    ? 'bg-emerald-500 hover:bg-emerald-400'
-                    : r.overallStatus === 'changed'
-                    ? 'bg-amber-500 hover:bg-amber-400'
-                    : 'bg-rose-500 hover:bg-rose-400'
-                } ${activeRun?.id === r.id ? 'ring-2 ring-white' : ''}`}
-              />
-            ))}
-          </div>
-
-          <div className="flex items-center justify-between text-[11px] text-slate-400 pt-1">
-            <span className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-xs bg-emerald-500" /> Passed ({passedRuns})
-            </span>
-            <span className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-xs bg-amber-500" /> Changed / Regression ({changedRuns})
-            </span>
-            <span className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-xs bg-rose-500" /> Failed ({failedRuns})
-            </span>
-          </div>
-        </div>
-      )}
-
-      {/* Main View: Left Runs List, Right Selected Run Details & Regression Inspector */}
+      {/* Main History Layout */}
       {runs.length === 0 ? (
-        <div className="p-12 text-center rounded-xl bg-slate-900/40 border border-slate-800 text-slate-500 text-xs">
-          <History className="w-10 h-10 mx-auto text-slate-600 mb-2" />
-          <p className="text-slate-300 font-medium">No replay runs recorded yet</p>
-          <p className="mt-1 max-w-sm mx-auto">
-            Head over to any workflow and click &quot;Replay Lab&quot; to execute mock or endpoint replays and start building regression history.
+        <div className="p-12 text-center rounded-xl bg-slate-900 border border-slate-800 text-slate-400 text-xs space-y-2">
+          <History className="w-8 h-8 text-slate-600 mx-auto" />
+          <div className="font-semibold text-slate-300">No replay runs recorded yet</div>
+          <p className="text-slate-500 max-w-sm mx-auto">
+            Execute replays from the Replay Lab to populate historical regression metrics and assertion audits.
           </p>
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          {/* Left Column: Runs List */}
+          {/* Left Column: Recorded Runs List */}
           <div className="lg:col-span-4 space-y-2">
             <div className="text-xs font-semibold text-slate-400 px-1 mb-2">
               Recorded Runs ({runs.length})
@@ -243,6 +215,24 @@ export function RegressionHistoryView({
                       {r.workflowName}
                     </div>
 
+                    {/* Assertion summary badge if run has assertions */}
+                    {r.assertionSummary && r.assertionSummary.total > 0 && (
+                      <div className="mt-1.5 flex items-center gap-1.5">
+                        <span
+                          className={`text-[10px] font-mono px-1.5 py-0.5 rounded border flex items-center gap-1 ${
+                            r.assertionSummary.failed === 0
+                              ? 'bg-emerald-950/50 text-emerald-300 border-emerald-800/80'
+                              : 'bg-rose-950/50 text-rose-300 border-rose-800/80'
+                          }`}
+                        >
+                          <ShieldCheck className="w-2.5 h-2.5" />
+                          <span>
+                            Assertions: {r.assertionSummary.passed}/{r.assertionSummary.total}
+                          </span>
+                        </span>
+                      </div>
+                    )}
+
                     <div className="flex items-center justify-between mt-2 pt-2 border-t border-slate-800/80 text-[10px] font-mono text-slate-400">
                       <span>{r.mode === 'mock' ? 'Mock Mode' : 'Endpoint Preview'}</span>
                       <span>{r.durationMs}ms</span>
@@ -263,7 +253,7 @@ export function RegressionHistoryView({
             </div>
           </div>
 
-          {/* Right Column: Active Run Detail & Steps Diff */}
+          {/* Right Column: Active Run Detail (Tabbed: Assertions & Steps) */}
           <div className="lg:col-span-8 space-y-4">
             {activeRun && (
               <div className="p-5 rounded-xl bg-slate-900 border border-slate-800 space-y-4">
@@ -293,92 +283,201 @@ export function RegressionHistoryView({
                   )}
                 </div>
 
-                {/* Filter step list by status */}
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold text-slate-300">
-                    Step Results in this Run ({activeStepResultsList.length})
-                  </span>
+                {/* Sub-Tab Switcher: Assertions vs Steps */}
+                <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('assertions')}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                        activeTab === 'assertions'
+                          ? 'bg-indigo-600/20 text-indigo-300 border border-indigo-500/40 shadow-xs'
+                          : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+                      }`}
+                    >
+                      <ShieldCheck className="w-3.5 h-3.5 text-indigo-400" />
+                      <span>Assertion Results</span>
+                      {activeRun.assertionSummary && (
+                        <span
+                          className={`text-[10px] font-mono px-1.5 py-0.2 rounded ${
+                            activeRun.assertionSummary.failed === 0
+                              ? 'bg-emerald-950 text-emerald-300 border border-emerald-800'
+                              : 'bg-rose-950 text-rose-300 border border-rose-800'
+                          }`}
+                        >
+                          {activeRun.assertionSummary.passed}/{activeRun.assertionSummary.total}
+                        </span>
+                      )}
+                    </button>
 
-                  <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-lg border border-slate-800 text-xs">
-                    {(['all', 'passed', 'changed', 'failed'] as const).map((st) => (
-                      <button
-                        key={st}
-                        onClick={() => setStatusFilter(st)}
-                        className={`px-2.5 py-0.5 rounded capitalize text-[11px] transition-colors ${
-                          statusFilter === st
-                            ? 'bg-slate-800 text-slate-100 font-semibold'
-                            : 'text-slate-400 hover:text-slate-200'
-                        }`}
-                      >
-                        {st}
-                      </button>
-                    ))}
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('steps')}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                        activeTab === 'steps'
+                          ? 'bg-slate-800 text-slate-100 border border-slate-700 shadow-xs'
+                          : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+                      }`}
+                    >
+                      <ListOrdered className="w-3.5 h-3.5 text-indigo-400" />
+                      <span>Step Diffs ({activeStepResultsList.length})</span>
+                    </button>
                   </div>
+
+                  {activeTab === 'steps' && (
+                    <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-lg border border-slate-800 text-xs">
+                      {(['all', 'passed', 'changed', 'failed'] as const).map((st) => (
+                        <button
+                          key={st}
+                          onClick={() => setStatusFilter(st)}
+                          className={`px-2.5 py-0.5 rounded capitalize text-[11px] transition-colors ${
+                            statusFilter === st
+                              ? 'bg-slate-800 text-slate-100 font-semibold'
+                              : 'text-slate-400 hover:text-slate-200'
+                          }`}
+                        >
+                          {st}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
-                {/* Steps List */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                  {filteredStepResults.map((item, idx) => {
-                    const isSelected =
-                      (selectedStepId || activeStepResultsList[0]?.stepId) === item.stepId;
-                    return (
-                      <div
-                        key={item.stepId}
-                        onClick={() => setSelectedStepId(item.stepId)}
-                        className={`p-3 rounded-lg border transition-all cursor-pointer ${
-                          isSelected
-                            ? 'border-indigo-500 bg-indigo-950/20 ring-1 ring-indigo-500'
-                            : 'border-slate-800 bg-slate-950/60 hover:border-slate-700'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between gap-1 mb-1">
-                          <span className="text-[11px] font-mono text-slate-400 truncate">
-                            {item.stepDef?.tool
-                              ? `${item.stepDef.server}:${item.stepDef.tool}`
-                              : item.stepDef?.type || item.stepId}
-                          </span>
-                          <span
-                            className={`px-1.5 py-0.2 rounded text-[10px] font-mono uppercase font-bold ${
-                              item.result.status === 'passed'
-                                ? 'bg-emerald-500/10 text-emerald-400'
-                                : item.result.status === 'changed'
-                                ? 'bg-amber-500/10 text-amber-400'
-                                : 'bg-rose-500/10 text-rose-400'
+                {/* TAB 1: ASSERTIONS RESULTS FOR RUN */}
+                {activeTab === 'assertions' && (
+                  <div className="space-y-3">
+                    {activeRun.assertionResults && activeRun.assertionResults.length > 0 ? (
+                      <div className="space-y-2">
+                        {activeRun.assertionResults.map((asrt) => (
+                          <div
+                            key={asrt.assertionId}
+                            className={`p-3.5 rounded-xl border text-xs space-y-1.5 ${
+                              asrt.status === 'passed'
+                                ? 'bg-emerald-950/15 border-emerald-800/60'
+                                : asrt.status === 'failed'
+                                ? 'bg-rose-950/20 border-rose-800/80 shadow-xs'
+                                : 'bg-slate-950/40 border-slate-800'
                             }`}
                           >
-                            {item.result.status}
-                          </span>
-                        </div>
-                        <div className="text-[11px] text-slate-300 truncate">
-                          {item.result.reason ||
-                            (item.result.diffs.length > 0
-                              ? `${item.result.diffs.length} discrepancy`
-                              : 'Identical')}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="flex items-center gap-2">
+                                <span
+                                  className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase ${
+                                    asrt.status === 'passed'
+                                      ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                                      : asrt.status === 'failed'
+                                      ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40'
+                                      : 'bg-slate-900 text-slate-400 border border-slate-800'
+                                  }`}
+                                >
+                                  {asrt.status}
+                                </span>
+                                <span className="font-bold text-slate-100">{asrt.assertionName}</span>
+                              </div>
+                              <span className="text-[10px] font-mono text-slate-500 bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800">
+                                {asrt.checkType}
+                              </span>
+                            </div>
 
-                {/* Diff Viewer for Selected Step */}
-                {inspectedStepItem && (
-                  <div className="pt-4 border-t border-slate-800">
-                    <div className="text-xs font-semibold text-slate-300 mb-2">
-                      Comparison Detail for:{' '}
-                      <span className="font-mono text-indigo-400">
-                        {inspectedStepItem.stepDef?.tool || inspectedStepItem.stepId}
-                      </span>
+                            <p className="text-slate-300 text-[11px] leading-relaxed">
+                              {asrt.explanation}
+                            </p>
+
+                            {(asrt.expectedValue !== undefined || asrt.actualValue !== undefined) && (
+                              <div className="flex flex-wrap gap-2 text-[10px] font-mono pt-0.5">
+                                {asrt.expectedValue !== undefined && (
+                                  <span className="text-slate-400">
+                                    Expected: <span className="text-indigo-300">{JSON.stringify(asrt.expectedValue)}</span>
+                                  </span>
+                                )}
+                                {asrt.actualValue !== undefined && (
+                                  <span className="text-slate-400">
+                                    Actual:{' '}
+                                    <span className={asrt.status === 'passed' ? 'text-emerald-300' : 'text-rose-300'}>
+                                      {JSON.stringify(asrt.actualValue)}
+                                    </span>
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="p-8 text-center text-slate-500 text-xs rounded-xl bg-slate-950/40 border border-slate-800">
+                        No assertions were evaluated during this historical run.
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* TAB 2: STEP RESULTS & DIFF VIEWER */}
+                {activeTab === 'steps' && (
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                      {filteredStepResults.map((item) => {
+                        const isSelected =
+                          (selectedStepId || activeStepResultsList[0]?.stepId) === item.stepId;
+                        return (
+                          <div
+                            key={item.stepId}
+                            onClick={() => setSelectedStepId(item.stepId)}
+                            className={`p-3 rounded-lg border transition-all cursor-pointer ${
+                              isSelected
+                                ? 'border-indigo-500 bg-indigo-950/20 ring-1 ring-indigo-500'
+                                : 'border-slate-800 bg-slate-950/60 hover:border-slate-700'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between gap-1 mb-1">
+                              <span className="text-[11px] font-mono text-slate-400 truncate">
+                                {item.stepDef?.tool
+                                  ? `${item.stepDef.server}:${item.stepDef.tool}`
+                                  : item.stepDef?.type || item.stepId}
+                              </span>
+                              <span
+                                className={`px-1.5 py-0.2 rounded text-[10px] font-mono uppercase font-bold ${
+                                  item.result.status === 'passed'
+                                    ? 'bg-emerald-500/10 text-emerald-400'
+                                    : item.result.status === 'changed'
+                                    ? 'bg-amber-500/10 text-amber-400'
+                                    : 'bg-rose-500/10 text-rose-400'
+                                }`}
+                              >
+                                {item.result.status}
+                              </span>
+                            </div>
+                            <div className="text-[11px] text-slate-300 truncate">
+                              {item.result.reason ||
+                                (item.result.diffs.length > 0
+                                  ? `${item.result.diffs.length} discrepancy`
+                                  : 'Identical')}
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
 
-                    <DiffViewer
-                      diffs={inspectedStepItem.result.diffs}
-                      baseline={inspectedStepItem.result.baselineResult}
-                      replayed={inspectedStepItem.result.replayedResult}
-                      status={inspectedStepItem.result.status}
-                      error={inspectedStepItem.result.error}
-                      baselineDurationMs={inspectedStepItem.result.baselineDurationMs}
-                      replayedDurationMs={inspectedStepItem.result.replayedDurationMs}
-                    />
+                    {/* Diff Viewer for Selected Step */}
+                    {inspectedStepItem && (
+                      <div className="pt-4 border-t border-slate-800">
+                        <div className="text-xs font-semibold text-slate-300 mb-2">
+                          Comparison Detail for:{' '}
+                          <span className="font-mono text-indigo-400">
+                            {inspectedStepItem.stepDef?.tool || inspectedStepItem.stepId}
+                          </span>
+                        </div>
+
+                        <DiffViewer
+                          diffs={inspectedStepItem.result.diffs}
+                          baseline={inspectedStepItem.result.baselineResult}
+                          replayed={inspectedStepItem.result.replayedResult}
+                          status={inspectedStepItem.result.status}
+                          error={inspectedStepItem.result.error}
+                          baselineDurationMs={inspectedStepItem.result.baselineDurationMs}
+                          replayedDurationMs={inspectedStepItem.result.replayedDurationMs}
+                        />
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

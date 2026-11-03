@@ -12,10 +12,92 @@ export interface TraceStep {
   content?: string;
 }
 
+export type AssertionCheckType =
+  | 'json_path_exists'
+  | 'json_path_missing'
+  | 'json_path_equals'
+  | 'string_matches'
+  | 'numeric_range'
+  | 'argument_value'
+  | 'duration_limit';
+
+export type AssertionTarget = 'step' | 'all_tool_calls';
+
+export interface WorkflowAssertion {
+  id: string;
+  name: string;
+  description?: string;
+  enabled: boolean;
+  target: AssertionTarget;
+  targetStepId?: string; // Target step id when target === 'step'
+  targetToolName?: string; // Optional tool filter when target === 'all_tool_calls'
+  checkType: AssertionCheckType;
+
+  // JSON path configuration
+  jsonPath?: string; // e.g. "id", "customer.arr", "matched_articles[0].article_id", "total_matches"
+  expectedValue?: unknown; // Value to compare against in json_path_equals
+
+  // String & Regex matching configuration
+  stringMode?: 'contains' | 'regex' | 'one_of';
+  stringPattern?: string; // Substring or regular expression pattern
+  allowedValues?: string[]; // Allowed values list e.g. ["P1-Critical", "P2-High", "P3-Low", "P4-Normal"]
+  caseSensitive?: boolean;
+
+  // Numeric range configuration
+  numericOperator?: 'above' | 'below' | 'within_range' | 'above_or_equal' | 'below_or_equal';
+  minValue?: number;
+  maxValue?: number;
+  threshold?: number;
+
+  // Argument value inspection
+  argumentOperator?: 'includes' | 'excludes';
+  argumentKey?: string; // Specific argument key or undefined to inspect entire args
+  argumentValue?: unknown; // Value to check inclusion or exclusion (e.g. "password")
+
+  // Duration limit configuration
+  maxDurationMs?: number;
+}
+
+export type AssertionStatus = 'passed' | 'failed' | 'skipped';
+
+export interface StepAssertionDetail {
+  stepId: string;
+  stepIndex: number;
+  stepLabel: string;
+  status: AssertionStatus;
+  message: string;
+  actualValue?: unknown;
+}
+
+export interface AssertionResult {
+  assertionId: string;
+  assertionName: string;
+  checkType: AssertionCheckType;
+  target: AssertionTarget;
+  targetStepId?: string;
+  targetToolName?: string;
+  enabled: boolean;
+  status: AssertionStatus;
+  explanation: string;
+  stepId?: string;
+  stepLabel?: string;
+  actualValue?: unknown;
+  expectedValue?: unknown;
+  stepDetails?: StepAssertionDetail[];
+}
+
+export interface AssertionSummary {
+  total: number;
+  passed: number;
+  failed: number;
+  skipped: number;
+}
+
 export interface WorkflowTraceExport {
   name: string;
   description: string;
   steps: TraceStep[];
+  assertions?: WorkflowAssertion[];
 }
 
 export interface WorkflowTrace extends WorkflowTraceExport {
@@ -25,6 +107,7 @@ export interface WorkflowTrace extends WorkflowTraceExport {
   updatedAt: string;
   lastRunAt?: string;
   lastReplayStatus?: 'passed' | 'changed' | 'failed' | 'not_run';
+  assertions?: WorkflowAssertion[];
 }
 
 export type StepReplayStatus = 'passed' | 'changed' | 'failed';
@@ -84,6 +167,8 @@ export interface ReplayRun {
   failedSteps: number;
   durationMs: number;
   stepResults: Record<string, StepReplayResult>;
+  assertionResults?: AssertionResult[];
+  assertionSummary?: AssertionSummary;
 }
 
 export interface BranchStepModification {
@@ -109,4 +194,3 @@ export interface ReplayBranch {
   latestRun?: ReplayRun;
   lastReplayStatus?: 'passed' | 'changed' | 'failed' | 'not_run';
 }
-

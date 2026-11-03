@@ -15,7 +15,20 @@ export function getStoredWorkflows(): WorkflowTrace[] {
       return SEEDED_WORKFLOWS;
     }
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) && parsed.length > 0 ? parsed : SEEDED_WORKFLOWS;
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      // Ensure seeded workflows have their default assertions if not set yet
+      const merged = parsed.map((wf: WorkflowTrace) => {
+        if (!wf.assertions || wf.assertions.length === 0) {
+          const seeded = SEEDED_WORKFLOWS.find((s) => s.id === wf.id);
+          if (seeded && seeded.assertions && seeded.assertions.length > 0) {
+            return { ...wf, assertions: seeded.assertions };
+          }
+        }
+        return wf;
+      });
+      return merged;
+    }
+    return SEEDED_WORKFLOWS;
   } catch (err) {
     console.error('Error reading workflows from localStorage:', err);
     return SEEDED_WORKFLOWS;

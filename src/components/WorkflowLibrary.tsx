@@ -17,6 +17,7 @@ import {
   Copy,
   Trash2,
   Share2,
+  ShieldCheck,
 } from 'lucide-react';
 
 interface WorkflowLibraryProps {
@@ -259,6 +260,15 @@ export function WorkflowLibrary({
                     <span>{wf.steps.length} steps</span>
                     <span>•</span>
                     <span>{toolCalls.length} tool calls</span>
+                    {wf.assertions && wf.assertions.length > 0 && (
+                      <>
+                        <span>•</span>
+                        <span className="text-indigo-400 flex items-center gap-1 font-semibold">
+                          <ShieldCheck className="w-3 h-3" />
+                          <span>{wf.assertions.length} check{wf.assertions.length !== 1 ? 's' : ''}</span>
+                        </span>
+                      </>
+                    )}
                   </div>
                 </div>
 

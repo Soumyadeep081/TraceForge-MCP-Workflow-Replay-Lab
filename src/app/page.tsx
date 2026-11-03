@@ -171,6 +171,12 @@ export default function TraceForgeApp() {
     setWorkflows(getStoredWorkflows());
   };
 
+  const handleUpdateWorkflowTrace = (updatedWf: WorkflowTrace) => {
+    saveWorkflow(updatedWf);
+    setWorkflows(getStoredWorkflows());
+    showToast(`Workflow "${updatedWf.name}" assertions updated`);
+  };
+
   const handleSaveReplayRun = (run: ReplayRun) => {
     saveReplayRun(run);
     setReplayRuns(getStoredReplayRuns());
@@ -366,6 +372,7 @@ export default function TraceForgeApp() {
             onOpenRules={() => setIsConfigModalOpen(true)}
             onBranchStep={handleOpenBranchModal}
             onSelectBranch={handleSelectBranch}
+            onUpdateWorkflow={handleUpdateWorkflowTrace}
           />
         )}
 

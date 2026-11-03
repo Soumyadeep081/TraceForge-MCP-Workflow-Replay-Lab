@@ -8,11 +8,20 @@ import {
   WorkflowTrace,
 } from '@/types/workflow';
 import { compareStep } from './comparator';
+import { evaluateWorkflowAssertions, StepExecutionSnapshot } from './assertionEngine';
+
+export type AssertionDemoOverride =
+  | 'none'
+  | 'inject_password'
+  | 'inject_missing_id'
+  | 'inject_disallowed_priority'
+  | 'inject_zero_kb_matches'
+  | 'inject_sla_breach';
 
 export interface StepReplayExecution {
   step: TraceStep;
   result: StepReplayResult;
-  replayedPayload: any;
+  replayedPayload: unknown;
   durationMs: number;
   error?: string;
 }
@@ -24,14 +33,20 @@ export type ProgressCallback = (
 ) => void;
 
 /**
- * Generates simulated replay output based on scenario
+ * Generates simulated replay output based on scenario and optional demo override
  */
 export function generateSimulatedStepOutput(
   step: TraceStep,
   scenario: SimulationScenario,
-  stepIndex: number
-): { replayedResult: any; durationMs: number; error?: string } {
-  const baseDuration = step.durationMs || 150;
+  stepIndex: number,
+  demoOverride?: AssertionDemoOverride
+): { replayedResult: unknown; durationMs: number; error?: string } {
+  let baseDuration = step.durationMs || 150;
+
+  // Handle demo overrides to easily demonstrate passing & failing assertions
+  if (demoOverride === 'inject_sla_breach' && (step.tool === 'fetch_ticket' || stepIndex === 1)) {
+    baseDuration = 780;
+  }
 
   // Latency scenario
   if (scenario === 'simulate_latency') {
@@ -134,15 +149,41 @@ export function generateSimulatedStepOutput(
     }
   }
 
-  // Deterministic pass scenario: return identical payload
+  // Deterministic pass scenario: return identical payload (with optional demo mutation)
+  let finalPayload: unknown =
+    step.type === 'tool_result'
+      ? JSON.parse(JSON.stringify(step.result || {}))
+      : step.type === 'tool_call'
+      ? JSON.parse(JSON.stringify(step.arguments || {}))
+      : step.content;
+
+  // Apply demo overrides if requested to make assertion testing crystal clear
+  if (demoOverride === 'inject_password' && step.type === 'tool_call') {
+    finalPayload = typeof finalPayload === 'object' && finalPayload !== null
+      ? { ...(finalPayload as Record<string, unknown>), password: 'temp_admin_secret_9941' }
+      : { password: 'temp_admin_secret_9941' };
+  } else if (demoOverride === 'inject_missing_id' && step.type === 'tool_result' && typeof finalPayload === 'object' && finalPayload !== null) {
+    const copy = { ...(finalPayload as Record<string, unknown>) };
+    delete copy.id;
+    finalPayload = copy;
+  } else if (demoOverride === 'inject_disallowed_priority' && step.type === 'tool_result' && typeof finalPayload === 'object' && finalPayload !== null) {
+    const copy = { ...(finalPayload as Record<string, unknown>) };
+    copy.priority = 'P9-Disallowed';
+    finalPayload = copy;
+  } else if (demoOverride === 'inject_zero_kb_matches' && (step.tool === 'search_articles' || stepIndex === 4)) {
+    if (step.type === 'tool_result') {
+      finalPayload = { query: 'No matching records', total_matches: 0, matched_articles: [] };
+    }
+  }
+
+  const resolvedDuration =
+    demoOverride === 'inject_sla_breach' && (step.tool === 'fetch_ticket' || stepIndex <= 2)
+      ? 780
+      : Math.max(10, baseDuration + Math.floor((Math.random() - 0.5) * 20));
+
   return {
-    replayedResult:
-      step.type === 'tool_result'
-        ? JSON.parse(JSON.stringify(step.result || {}))
-        : step.type === 'tool_call'
-        ? JSON.parse(JSON.stringify(step.arguments || {}))
-        : step.content,
-    durationMs: Math.max(10, baseDuration + Math.floor((Math.random() - 0.5) * 20)),
+    replayedResult: finalPayload,
+    durationMs: resolvedDuration,
   };
 }
 
@@ -157,6 +198,7 @@ export async function executeReplayWorkflow(
     scenario: SimulationScenario;
     config: ComparisonConfig;
     playbackSpeed: 'normal' | 'fast' | 'instant';
+    assertionDemoOverride?: AssertionDemoOverride;
     onProgress?: ProgressCallback;
     abortSignal?: { aborted: boolean };
   }
@@ -164,6 +206,7 @@ export async function executeReplayWorkflow(
   const startedAt = new Date().toISOString();
   const startTime = Date.now();
   const stepResults: Record<string, StepReplayResult> = {};
+  const stepExecutions: Record<string, StepExecutionSnapshot> = {};
 
   let passedSteps = 0;
   let changedSteps = 0;
@@ -189,8 +232,15 @@ export async function executeReplayWorkflow(
     const { replayedResult, durationMs, error } = generateSimulatedStepOutput(
       step,
       options.scenario,
-      i
+      i,
+      options.assertionDemoOverride
     );
+
+    stepExecutions[step.id] = {
+      replayedPayload: replayedResult,
+      durationMs,
+      error,
+    };
 
     // Run comparator
     const stepComparison = compareStep(step, replayedResult, durationMs, error, options.config);
@@ -215,9 +265,16 @@ export async function executeReplayWorkflow(
   const completedAt = new Date().toISOString();
   const totalDuration = Date.now() - startTime;
 
-  // Determine overall status
+  // Evaluate assertions across recorded and replayed steps
+  const { results: assertionResults, summary: assertionSummary } = evaluateWorkflowAssertions(
+    workflow,
+    workflow.steps,
+    stepExecutions
+  );
+
+  // Determine overall status (fails if any step failed OR any enabled assertion failed)
   let overallStatus: 'passed' | 'changed' | 'failed' = 'passed';
-  if (failedSteps > 0) {
+  if (failedSteps > 0 || (assertionSummary && assertionSummary.failed > 0)) {
     overallStatus = 'failed';
   } else if (changedSteps > 0) {
     overallStatus = 'changed';
@@ -240,6 +297,8 @@ export async function executeReplayWorkflow(
     failedSteps,
     durationMs: totalDuration,
     stepResults,
+    assertionResults,
+    assertionSummary,
   };
 
   return run;
@@ -400,8 +459,28 @@ export async function executeBranchReplay(
   const completedAt = new Date().toISOString();
   const totalDuration = Date.now() - startTime;
 
+  // Evaluate assertions on branch execution
+  const branchExecutions: Record<string, StepExecutionSnapshot> = {};
+  for (const bStep of branch.branchSteps) {
+    branchExecutions[bStep.id] = {
+      replayedPayload:
+        bStep.type === 'tool_result'
+          ? bStep.result
+          : bStep.type === 'tool_call'
+          ? bStep.arguments
+          : bStep.content,
+      durationMs: bStep.durationMs || 150,
+    };
+  }
+
+  const { results: assertionResults, summary: assertionSummary } = evaluateWorkflowAssertions(
+    baselineWorkflow,
+    branch.branchSteps,
+    branchExecutions
+  );
+
   let overallStatus: 'passed' | 'changed' | 'failed' = 'passed';
-  if (failedSteps > 0) {
+  if (failedSteps > 0 || (assertionSummary && assertionSummary.failed > 0)) {
     overallStatus = 'failed';
   } else if (changedSteps > 0) {
     overallStatus = 'changed';
@@ -425,6 +504,8 @@ export async function executeBranchReplay(
     failedSteps,
     durationMs: totalDuration,
     stepResults,
+    assertionResults,
+    assertionSummary,
   };
 
   return run;

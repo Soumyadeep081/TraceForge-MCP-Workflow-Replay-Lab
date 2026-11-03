@@ -55,6 +55,38 @@ const SAMPLE_TEMPLATE = {
       content: 'User usr_84920 is on the active Pro Monthly tier with 10 workspace allocations.',
     },
   ],
+  assertions: [
+    {
+      id: 'asrt-sample-status-active',
+      name: 'User tier is active',
+      enabled: true,
+      target: 'step',
+      targetStepId: 'step-3',
+      checkType: 'json_path_equals',
+      jsonPath: 'status',
+      expectedValue: 'active',
+    },
+    {
+      id: 'asrt-sample-workspace-limit',
+      name: 'Max workspaces at least 10',
+      enabled: true,
+      target: 'step',
+      targetStepId: 'step-3',
+      checkType: 'numeric_range',
+      jsonPath: 'limits.max_workspaces',
+      numericOperator: 'above_or_equal',
+      threshold: 10,
+    },
+    {
+      id: 'asrt-sample-no-secrets',
+      name: 'No password or secret in tool arguments',
+      enabled: true,
+      target: 'all_tool_calls',
+      checkType: 'argument_value',
+      argumentOperator: 'excludes',
+      argumentValue: 'password',
+    },
+  ],
 };
 
 export function ImportExportModal({
@@ -116,6 +148,22 @@ export function ImportExportModal({
       }
     });
 
+    if (rawObj.assertions !== undefined) {
+      if (!Array.isArray(rawObj.assertions)) {
+        errors.push('"assertions" property must be an array.');
+      } else {
+        rawObj.assertions.forEach((asrt: any, i: number) => {
+          if (!asrt || typeof asrt !== 'object') {
+            errors.push(`Assertion ${i + 1} is not an object.`);
+          } else if (!asrt.name || typeof asrt.name !== 'string') {
+            errors.push(`Assertion ${i + 1}: Missing or invalid "name" string.`);
+          } else if (!asrt.checkType || typeof asrt.checkType !== 'string') {
+            errors.push(`Assertion ${i + 1} ("${asrt.name || 'unnamed'}"): Missing "checkType".`);
+          }
+        });
+      }
+    }
+
     return { valid: errors.length === 0, errors };
   };
 
@@ -152,6 +200,32 @@ export function ImportExportModal({
         durationMs: s.durationMs,
         content: s.content,
       })),
+      assertions: Array.isArray(parsed.assertions)
+        ? parsed.assertions.map((a: any, idx: number) => ({
+            id: a.id || `asrt-import-${idx + 1}-${Date.now().toString().slice(-4)}`,
+            name: a.name,
+            description: a.description,
+            enabled: a.enabled !== false,
+            target: a.target || 'step',
+            targetStepId: a.targetStepId,
+            targetToolName: a.targetToolName,
+            checkType: a.checkType,
+            jsonPath: a.jsonPath,
+            expectedValue: a.expectedValue,
+            stringMode: a.stringMode,
+            stringPattern: a.stringPattern,
+            allowedValues: a.allowedValues,
+            caseSensitive: a.caseSensitive,
+            numericOperator: a.numericOperator,
+            threshold: a.threshold,
+            minValue: a.minValue,
+            maxValue: a.maxValue,
+            argumentOperator: a.argumentOperator,
+            argumentKey: a.argumentKey,
+            argumentValue: a.argumentValue,
+            maxDurationMs: a.maxDurationMs,
+          }))
+        : undefined,
       createdAt: parsed.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       lastReplayStatus: 'not_run',
@@ -185,6 +259,7 @@ export function ImportExportModal({
         description: exportWorkflow.description,
         tags: exportWorkflow.tags,
         steps: exportWorkflow.steps,
+        assertions: exportWorkflow.assertions || [],
       }
     : SAMPLE_TEMPLATE;
 

@@ -98,12 +98,42 @@ export function NewWorkflowModal({ isOpen, onClose, onCreate }: NewWorkflowModal
       ];
     }
 
+    let initialAssertions: import('@/types/workflow').WorkflowAssertion[] = [];
+
+    if (template === 'support') {
+      initialAssertions = [
+        {
+          id: `asrt-supp-ticket-${Date.now()}`,
+          name: 'Ticket has ID',
+          enabled: true,
+          target: 'step',
+          targetStepId: 'step-3',
+          checkType: 'json_path_exists',
+          jsonPath: 'id',
+        },
+      ];
+    } else if (template === 'api') {
+      initialAssertions = [
+        {
+          id: `asrt-api-status-${Date.now()}`,
+          name: 'Status is 200 OK',
+          enabled: true,
+          target: 'step',
+          targetStepId: 'step-3',
+          checkType: 'json_path_equals',
+          jsonPath: 'status',
+          expectedValue: 200,
+        },
+      ];
+    }
+
     const newWorkflow: WorkflowTrace = {
       id: `wf-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
       name: name.trim(),
       description: description.trim() || 'Custom MCP workflow trace.',
       tags,
       steps: initialSteps,
+      assertions: initialAssertions,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       lastReplayStatus: 'not_run',
